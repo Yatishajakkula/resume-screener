@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Resume Screener</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <span class="logo-icon">🎯</span>
+      <div>
+        <h1>Smart Resume Screener</h1>
+        <p>AI-powered candidate ranking using Groq + LLaMA3</p>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- STEP 1: API KEY -->
+    <div class="card">
+      <h2>🔑 Step 1 — Groq API Key</h2>
+      <p class="hint">Get your free key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a> — free, no credit card needed.</p>
+      <input type="password" id="groq_key" placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxx" />
+    </div>
+
+    <!-- STEP 2: JOB DESCRIPTION -->
+    <div class="card">
+      <h2>📋 Step 2 — Job Description</h2>
+      <p class="hint">Paste the full job description here.</p>
+      <textarea id="job_description" rows="7" placeholder="e.g. We are looking for a Data Science Intern with experience in Python, machine learning, Scikit-learn, Pandas, and Flask..."></textarea>
+    </div>
+
+    <!-- STEP 3: UPLOAD -->
+    <div class="card">
+      <h2>📄 Step 3 — Upload Resume PDFs</h2>
+      <p class="hint">Upload one or more PDF resumes. The file name will be used as the candidate's name.</p>
+      <div class="upload-area" id="uploadArea">
+        <div class="upload-icon">📂</div>
+        <p>Drag & drop PDFs here or <label for="resumes" class="browse-link">browse files</label></p>
+        <input type="file" id="resumes" accept=".pdf" multiple hidden />
+        <div id="fileList"></div>
+      </div>
+    </div>
+
+    <!-- ANALYZE BUTTON -->
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">
+      🚀 Analyze Resumes
+    </button>
+
+    <!-- ERROR -->
+    <div id="errorBox" class="error-box" hidden></div>
+
+    <!-- LOADER -->
+    <div id="loader" class="loader" hidden>
+      <div class="spinner"></div>
+      <p>Analyzing resumes with AI... Please wait</p>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="results" hidden>
+      <h2 class="results-title">📊 Candidate Rankings</h2>
+      <div id="resultCards"></div>
+    </div>
+
+  </main>
+
+  <footer>
+    <p>Built with Flask · Groq LLaMA3 · pdfplumber &nbsp;|&nbsp; Smart Resume Screener</p>
+  </footer>
+
+  <script>
+    // File upload
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('resumes');
+    const fileList = document.getElementById('fileList');
+
+    uploadArea.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('browse-link')) fileInput.click();
+    });
+    uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+    uploadArea.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadArea.classList.remove('drag-over');
+      fileInput.files = e.dataTransfer.files;
+      updateFileList();
+    });
+    fileInput.addEventListener('change', updateFileList);
+
+    function updateFileList() {
+      const files = Array.from(fileInput.files);
+      fileList.innerHTML = files.map(f =>
+        `<div class="file-chip">📄 ${f.name} <span class="file-size">(${(f.size/1024).toFixed(0)} KB)</span></div>`
+      ).join('');
+    }
+
+    async function analyze() {
+      const groq_key = document.getElementById('groq_key').value.trim();
+      const job_description = document.getElementById('job_description').value.trim();
+      const files = fileInput.files;
+      const btn = document.getElementById('analyzeBtn');
+      const errorBox = document.getElementById('errorBox');
+      const loader = document.getElementById('loader');
+      const resultsDiv = document.getElementById('results');
+
+      // Validate
+      if (!groq_key) { showError('Please enter your Groq API key.'); return; }
+      if (!job_description) { showError('Please enter a job description.'); return; }
+      if (files.length === 0) { showError('Please upload at least one resume PDF.'); return; }
+
+      // Show loader
+      btn.disabled = true;
+      btn.textContent = '⏳ Analyzing...';
+      errorBox.hidden = true;
+      resultsDiv.hidden = true;
+      loader.hidden = false;
+
+      const formData = new FormData();
+      formData.append('groq_key', groq_key);
+      formData.append('job_description', job_description);
+      for (const file of files) formData.append('resumes', file);
+
+      try {
+        const resp = await fetch('/analyze', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+          showError(data.error || 'Something went wrong.');
+        } else {
+          renderResults(data.results);
+          resultsDiv.hidden = false;
+          resultsDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+      } catch (err) {
+        showError('Network error. Please try again.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Analyze Resumes';
+        loader.hidden = true;
+      }
+    }
+
+    function showError(msg) {
+      const errorBox = document.getElementById('errorBox');
+      errorBox.textContent = '❌ ' + msg;
+      errorBox.hidden = false;
+    }
+
+    function matchColor(level) {
+      return { Excellent: '#16a34a', Good: '#2563eb', Average: '#d97706', Poor: '#dc2626' }[level] || '#6b7280';
+    }
+
+    function renderResults(results) {
+      const container = document.getElementById('resultCards');
+      container.innerHTML = results.map((r, i) => `
+        <div class="result-card ${i === 0 ? 'top-candidate' : ''}">
+          ${i === 0 ? '<div class="top-tag">⭐ Top Candidate</div>' : ''}
+          <div class="result-header">
+            <div class="rank-badge" style="${i === 0 ? 'background:#16a34a' : ''}">#${i + 1}</div>
+            <div class="candidate-info">
+              <h3>${r.candidate}</h3>
+              <span class="match-badge" style="background:${matchColor(r.match_level)}">${r.match_level} Match</span>
+            </div>
+            <div class="score-circle" style="border-color:${matchColor(r.match_level)}">
+              <span>${r.score}</span>
+              <small>/100</small>
+            </div>
+          </div>
+          <div class="score-bar-bg">
+            <div class="score-bar-fill" style="width:${r.score}%;background:${matchColor(r.match_level)}"></div>
+          </div>
+          <p class="summary">${r.summary}</p>
+          <div class="two-col">
+            <div>
+              <h4>✅ Strengths</h4>
+              <ul>${(r.top_strengths || []).map(s => `<li>${s}</li>`).join('')}</ul>
+            </div>
+            <div>
+              <h4>⚠️ Gaps</h4>
+              <ul>${(r.gaps || []).map(g => `<li>${g}</li>`).join('')}</ul>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>
