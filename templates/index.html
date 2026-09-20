@@ -25,6 +25,10 @@
       <h2>🔑 Step 1 — Groq API Key</h2>
       <p class="hint">Get your free key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a> — free, no credit card needed.</p>
       <input type="password" id="groq_key" placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxx" />
+      <label class="remember-label">
+        <input type="checkbox" id="rememberKey" />
+        Remember my key on this device (stored only in this browser, never sent anywhere but Groq)
+      </label>
     </div>
 
     <!-- STEP 2: JOB DESCRIPTION -->
@@ -73,6 +77,27 @@
   </footer>
 
   <script>
+    // Remember Groq key (optional, opt-in, stored only in this browser)
+    const keyInput = document.getElementById('groq_key');
+    const rememberBox = document.getElementById('rememberKey');
+    const STORAGE_KEY = 'srs_groq_key';
+
+    const savedKey = localStorage.getItem(STORAGE_KEY);
+    if (savedKey) {
+      keyInput.value = savedKey;
+      rememberBox.checked = true;
+    }
+
+    function syncStoredKey() {
+      if (rememberBox.checked) {
+        localStorage.setItem(STORAGE_KEY, keyInput.value.trim());
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+    keyInput.addEventListener('input', syncStoredKey);
+    rememberBox.addEventListener('change', syncStoredKey);
+
     // File upload
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('resumes');
